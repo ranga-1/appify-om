@@ -1,0 +1,71 @@
+{
+  "family": "appify-om",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::643942183493:role/appify-ecs-task-execution-role",
+  "taskRoleArn": "arn:aws:iam::643942183493:role/appify-om-task-role",
+  "containerDefinitions": [
+    {
+      "name": "om",
+      "image": "643942183493.dkr.ecr.us-west-1.amazonaws.com/appify-om:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "API_VERSION",
+          "value": "v1"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-west-1"
+        },
+        {
+          "name": "DB_SECRET_ID",
+          "value": "appify/unshackle/tenants/admin"
+        },
+        {
+          "name": "CORE_DB_SECRET_ID",
+          "value": "appify/unshackle/core/db"
+        },
+        {
+          "name": "DB_NAME",
+          "value": "tenants"
+        },
+        {
+          "name": "CREDENTIAL_CACHE_TTL",
+          "value": "3600"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/appify-om",
+          "awslogs-region": "us-west-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 120
+      }
+    }
+  ]
+}
