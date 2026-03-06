@@ -185,3 +185,4 @@ CREDENTIAL_CACHE_TTL=3600
 - Python 3.11+
 - FastAPI
 - uv package manager
+# appify-om
