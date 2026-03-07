@@ -30,6 +30,26 @@ class ObjectMetadataCreate(BaseModel):
         default_factory=list,
         description="Field definitions (JSONB)"
     )
+    dependencies: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Object dependencies (JSONB array)"
+    )
+    uniqueness: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Uniqueness constraints (JSONB array)"
+    )
+    reference_controls: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Reference/lookup controls (JSONB array)"
+    )
+    advanced_search: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Advanced search configuration (JSONB object)"
+    )
+    validation_rules: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Validation rules (JSONB array)"
+    )
     
     @field_validator('label')
     @classmethod
@@ -51,6 +71,11 @@ class ObjectMetadataUpdate(BaseModel):
     enable_audit: Optional[bool] = None
     is_remote_object: Optional[bool] = None
     fields: Optional[List[Dict[str, Any]]] = None
+    dependencies: Optional[List[Dict[str, Any]]] = None
+    uniqueness: Optional[List[Dict[str, Any]]] = None
+    reference_controls: Optional[List[Dict[str, Any]]] = None
+    advanced_search: Optional[Dict[str, Any]] = None
+    validation_rules: Optional[List[Dict[str, Any]]] = None
     
     @field_validator('label')
     @classmethod
@@ -76,6 +101,16 @@ class ObjectMetadataResponse(BaseModel):
     enable_audit: bool
     is_remote_object: bool
     fields: List[Dict[str, Any]]
+    dependencies: Optional[List[Dict[str, Any]]] = None
+    uniqueness: Optional[List[Dict[str, Any]]] = None
+    reference_controls: Optional[List[Dict[str, Any]]] = None
+    advanced_search: Optional[Dict[str, Any]] = None
+    validation_rules: Optional[List[Dict[str, Any]]] = None
+    status: str
+    deployment_started_date: Optional[datetime] = None
+    table_created_date: Optional[datetime] = None
+    table_name: Optional[str] = None
+    deployment_error: Optional[str] = None
     created_by: UUID
     created_date: datetime
     modified_by: UUID
@@ -92,3 +127,17 @@ class ObjectMetadataListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class ObjectDeploymentResponse(BaseModel):
+    """Response model for object deployment."""
+    
+    object_id: str
+    api_name: str
+    table_name: str
+    schema: str
+    status: str
+    deployment_started_date: Optional[datetime] = None
+    table_created_date: Optional[datetime] = None
+    fields_deployed: int
+    message: str

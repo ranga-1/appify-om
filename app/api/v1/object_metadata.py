@@ -10,14 +10,17 @@ from app.models.object_metadata import (
     ObjectMetadataCreate,
     ObjectMetadataListResponse,
     ObjectMetadataResponse,
-    ObjectMetadataUpdate
+    ObjectMetadataUpdate,
+    ObjectDeploymentResponse
 )
 from app.services.object_metadata_service import ObjectMetadataService
+from app.services.object_deployment_service import ObjectDeploymentService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/object-metadata", tags=["object-metadata"])
 service = ObjectMetadataService()
+deployment_service = ObjectDeploymentService()
 
 
 @router.get(
@@ -190,6 +193,69 @@ def update_object_metadata(
         )
     except Exception as e:
         logger.exception("Error updating object metadata")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/{object_id}/deploy",
+    response_model=ObjectDeploymentResponse,
+    summary="Deploy business object as database table",
+    description="""
+    Deploy an object metadata definition as a physical database table.
+    
+    **Requirements:**
+    - Object status must be 'draft' or 'failed'
+    - Object must have valid fields array
+    - All referenced objects (in Reference fields) must already exist as tables
+    - API names must be unique
+    
+    **Process:**
+    1. Validates object and fields
+    2. Sets status to 'deploying'
+    3. Creates table with system fields (id, created_by, modified_by, created_date, modified_date, audit_info)
+    4. Creates user-defined fields with prefix (e.g., abc12_email)
+    5. Adds column comments
+    6. Creates UNIQUE constraints
+    7. Creates FOREIGN KEY constraints (ON DELETE RESTRICT)
+    8. Creates indexes on created_date, modified_date, unique fields, and foreign keys
+    9. Sets status to 'created' or 'failed'
+    
+    **Retry:**
+    - If deployment fails (status='failed'), you can retry by updating status to 'draft' and calling deploy again
+    
+    **Schema Routing:**
+    - **appify-admin**: Creates table in unshackle_core.public
+    - **customer-admin**: Creates table in tenants.tenant_{customer_id}
+    """
+)
+def deploy_object_metadata(
+    object_id: UUID,
+    user: UserContext = Depends(get_current_user)
+):
+    """Deploy object metadata as database table."""
+    try:
+        result = deployment_service.deploy_object(
+            object_id=object_id,
+            user_role=user.user_role,
+            customer_id=user.customer_id
+        )
+        
+        logger.info(
+            f"Object deployed: {result['api_name']} → {result['table_name']} "
+            f"in {result['schema']} by user {user.user_id}"
+        )
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.exception(f"Error deploying object {object_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

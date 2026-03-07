@@ -120,7 +120,10 @@ class ObjectMetadataService:
             query = f"""
                 SELECT id, label, api_name, description, 
                        used_in_global_search, enable_audit, is_remote_object,
-                       fields, created_by, created_date, modified_by, modified_date
+                       fields, dependencies, uniqueness, reference_controls,
+                       advanced_search, validation_rules, status,
+                       deployment_started_date, table_created_date, table_name,
+                       deployment_error, created_by, created_date, modified_by, modified_date
                 FROM {schema}.sys_object_metadata
                 ORDER BY created_date DESC
                 LIMIT %s OFFSET %s
@@ -169,7 +172,10 @@ class ObjectMetadataService:
             query = f"""
                 SELECT id, label, api_name, description,
                        used_in_global_search, enable_audit, is_remote_object,
-                       fields, created_by, created_date, modified_by, modified_date
+                       fields, dependencies, uniqueness, reference_controls,
+                       advanced_search, validation_rules, status,
+                       deployment_started_date, table_created_date, table_name,
+                       deployment_error, created_by, created_date, modified_by, modified_date
                 FROM {schema}.sys_object_metadata
                 WHERE id = %s
             """
@@ -243,11 +249,14 @@ class ObjectMetadataService:
             query = f"""
                 INSERT INTO {schema}.sys_object_metadata 
                 (label, api_name, description, used_in_global_search, enable_audit,
-                 is_remote_object, fields, created_by, modified_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 is_remote_object, fields, dependencies, uniqueness, reference_controls,
+                 advanced_search, validation_rules, created_by, modified_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, label, api_name, description, used_in_global_search,
-                          enable_audit, is_remote_object, fields, created_by,
-                          created_date, modified_by, modified_date
+                          enable_audit, is_remote_object, fields, dependencies,
+                          uniqueness, reference_controls, advanced_search, validation_rules,
+                          status, deployment_started_date, table_created_date, table_name,
+                          deployment_error, created_by, created_date, modified_by, modified_date
             """
             
             cur.execute(query, (
@@ -258,6 +267,11 @@ class ObjectMetadataService:
                 data.enable_audit,
                 data.is_remote_object,
                 psycopg2.extras.Json(data.fields),
+                psycopg2.extras.Json(data.dependencies) if data.dependencies else None,
+                psycopg2.extras.Json(data.uniqueness) if data.uniqueness else None,
+                psycopg2.extras.Json(data.reference_controls) if data.reference_controls else None,
+                psycopg2.extras.Json(data.advanced_search) if data.advanced_search else None,
+                psycopg2.extras.Json(data.validation_rules) if data.validation_rules else None,
                 user_id,
                 user_id
             ))
@@ -362,6 +376,26 @@ class ObjectMetadataService:
                 updates.append("fields = %s")
                 params.append(psycopg2.extras.Json(data.fields))
             
+            if data.dependencies is not None:
+                updates.append("dependencies = %s")
+                params.append(psycopg2.extras.Json(data.dependencies) if data.dependencies else None)
+            
+            if data.uniqueness is not None:
+                updates.append("uniqueness = %s")
+                params.append(psycopg2.extras.Json(data.uniqueness) if data.uniqueness else None)
+            
+            if data.reference_controls is not None:
+                updates.append("reference_controls = %s")
+                params.append(psycopg2.extras.Json(data.reference_controls) if data.reference_controls else None)
+            
+            if data.advanced_search is not None:
+                updates.append("advanced_search = %s")
+                params.append(psycopg2.extras.Json(data.advanced_search) if data.advanced_search else None)
+            
+            if data.validation_rules is not None:
+                updates.append("validation_rules = %s")
+                params.append(psycopg2.extras.Json(data.validation_rules) if data.validation_rules else None)
+            
             if not updates:
                 # No changes, return current record
                 cur.close()
@@ -377,8 +411,10 @@ class ObjectMetadataService:
                 SET {', '.join(updates)}
                 WHERE id = %s
                 RETURNING id, label, api_name, description, used_in_global_search,
-                          enable_audit, is_remote_object, fields, created_by,
-                          created_date, modified_by, modified_date
+                          enable_audit, is_remote_object, fields, dependencies,
+                          uniqueness, reference_controls, advanced_search, validation_rules,
+                          status, deployment_started_date, table_created_date, table_name,
+                          deployment_error, created_by, created_date, modified_by, modified_date
             """
             params.append(str(object_id))
             
