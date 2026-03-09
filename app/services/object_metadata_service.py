@@ -351,22 +351,16 @@ class ObjectMetadataService:
             params = []
             has_changes = False
             
-            # If label changed, regenerate api_name but enforce immutability
-            new_api_name = None
-            if data.label is not None and data.label != existing['label']:
-                new_api_name = self._sanitize_label_to_api_name(
-                    data.label, customer_prefix
+            # IMMUTABILITY CHECK: api_name cannot be changed directly
+            # Note: api_name is NOT regenerated when label changes - it stays as originally created
+            if data.api_name is not None and data.api_name != existing['api_name']:
+                raise ValueError(
+                    f"Cannot change api_name from '{existing['api_name']}' to '{data.api_name}'. "
+                    f"API names are immutable once created. You can change the label, but api_name will remain the same."
                 )
-                
-                # IMMUTABILITY CHECK: api_name cannot change once created
-                if new_api_name != existing['api_name']:
-                    raise ValueError(
-                        f"Cannot change api_name. The new label '{data.label}' would generate "
-                        f"api_name '{new_api_name}', but the existing api_name is '{existing['api_name']}'. "
-                        f"API names are immutable once created."
-                    )
-                
-                # Label changed but api_name remains the same
+            
+            # Label can be changed freely - api_name is NOT regenerated
+            if data.label is not None and data.label != existing['label']:
                 updates.append("label = %s")
                 params.append(data.label)
                 has_changes = True

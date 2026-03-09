@@ -37,7 +37,7 @@ cd /Users/rangavaithyalingam/Projects/appify-unshackle
 ./start-bastion-tunnel.sh
 
 # In another terminal, run migration
-psql -h localhost -p 5432 -U unshackle_core_app -d unshackle_core \
+psql -h localhost -p 5434 -U unshackle_core -d unshackle_core \
   -f /Users/rangavaithyalingam/Projects/appify-om/sql/migration-add-s3-folder-path.sql
 ```
 
@@ -50,18 +50,20 @@ psql -h localhost -p 5432 -U unshackle_core_app -d unshackle_core \
 
 ### Phase 2: Object Metadata API Validations
 
-#### Test 1: API Name Immutability
+#### Test 1: Label Updates and API Name Immutability
 
-**Scenario**: Try to change label in a way that would change api_name
+**Scenario**: Change label freely - api_name remains unchanged
 
 **Steps**:
-1. Create object with label "Customer Account" → api_name: "{prefix}_customer_account"
-2. Try to update label to "Client Account" → should generate api_name: "{prefix}_client_account"
+1. Create object with label "Job Order" → api_name: "{prefix}_job_order"
+2. Update label to "Work Order"
+3. Verify api_name did NOT change
 
 **Expected Behavior**:
-- [ ] Update request returns 400 Bad Request
-- [ ] Error message explains api_name immutability
-- [ ] Error shows old vs new api_name values
+- [ ] Update request returns 200 OK
+- [ ] Label updated to "Work Order"
+- [ ] api_name remains "{prefix}_job_order" (NOT regenerated from new label)
+- [ ] Response shows updated label with original api_name
 
 **Postman Request**: "Object Modeler > Object Metadata > Update Object Metadata" with modified label
 
