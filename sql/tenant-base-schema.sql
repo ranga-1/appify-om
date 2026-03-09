@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS sys_object_metadata
     table_created_date timestamp with time zone,
     table_name text,
     deployment_error text,
+    s3_folder_path text,
     created_by uuid NOT NULL,
     created_date timestamp with time zone NOT NULL DEFAULT now(),
     modified_by uuid NOT NULL,

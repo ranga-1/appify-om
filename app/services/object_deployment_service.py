@@ -303,6 +303,7 @@ class ObjectDeploymentService:
         column_defs.append("created_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()")
         column_defs.append("modified_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()")
         column_defs.append("audit_info JSONB")
+        column_defs.append("is_deleted BOOLEAN NOT NULL DEFAULT false")
         
         # User-defined fields (with prefix)
         for field in fields:
@@ -427,6 +428,76 @@ class ObjectDeploymentService:
         
         return indexes
     
+    def _table_exists(self, schema: str, table_name: str, cursor) -> bool:
+        """Check if table exists in schema."""
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            ) as exists
+        """, (schema, table_name))
+        return cursor.fetchone()['exists']
+    
+    def _get_existing_columns(self, schema: str, table_name: str, cursor) -> set:
+        """Get set of existing column names from a table."""
+        cursor.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+        """, (schema, table_name))
+        return {row['column_name'] for row in cursor.fetchall()}
+    
+    def _filter_active_fields(self, fields: List[Dict]) -> List[Dict]:
+        """Filter fields excluding those marked as deleted."""
+        return [
+            field for field in fields
+            if not field.get('mark_as_deleted', False)
+        ]
+    
+    def _ensure_is_deleted_column(self, schema: str, table_name: str, cursor):
+        """Ensure is_deleted column exists in table, add if missing."""
+        columns = self._get_existing_columns(schema, table_name, cursor)
+        
+        if 'is_deleted' not in columns:
+            logger.info(f"Adding is_deleted column to {schema}.{table_name}")
+            cursor.execute(f"""
+                ALTER TABLE {schema}.{table_name}
+                ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT false
+            """)
+    
+    def _build_alter_table_add_columns(
+        self,
+        schema: str,
+        api_name: str,
+        object_prefix: str,
+        new_fields: List[Dict],
+        datatype_mappings: Dict[str, str]
+    ) -> List[str]:
+        """
+        Build ALTER TABLE ADD COLUMN statements for new fields.
+        
+        Args:
+            schema: Database schema
+            api_name: Table name
+            object_prefix: Object prefix
+            new_fields: List of new fields to add
+            datatype_mappings: Datatype mappings
+            
+        Returns:
+            List of ALTER TABLE statements
+        """
+        alter_stmts = []
+        
+        for  field in new_fields:
+            column_def = self._build_column_definition(
+                field, object_prefix, datatype_mappings
+            )
+            alter_stmts.append(
+                f"ALTER TABLE {schema}.{api_name} ADD COLUMN {column_def};"
+            )
+        
+        return alter_stmts
+    
     def deploy_object(
         self,
         object_id: UUID,
@@ -475,24 +546,23 @@ class ObjectDeploymentService:
                     f"Only 'draft' or 'failed' objects can be deployed."
                 )
             
-            # Check if table already exists
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                ) as exists
-            """, (schema, obj['api_name']))
-            
-            if cur.fetchone()['exists']:
-                raise ValueError(
-                    f"Table {schema}.{obj['api_name']} already exists"
-                )
-            
             # Extract data
             api_name = obj['api_name']
             object_prefix = self._get_object_prefix(api_name)
-            fields = obj['fields'] or []
+            all_fields = obj['fields'] or []
             description = obj['description']
+            
+            # Filter active fields (exclude mark_as_deleted = true)
+            fields = self._filter_active_fields(all_fields)
+            
+            # Determine deployment mode (CREATE or UPDATE)
+            table_exists = self._table_exists(schema, api_name, cur)
+            is_update_mode = table_exists
+            
+            if is_update_mode:
+                logger.info(f"UPDATE mode: Table {schema}.{api_name} exists, will add new fields")
+            else:
+                logger.info(f"CREATE mode: Creating new table {schema}.{api_name}")
             
             # Load datatype mappings
             datatype_mappings = self._load_datatype_mappings(schema, cur)
@@ -519,69 +589,159 @@ class ObjectDeploymentService:
                 cur.execute("CREATE EXTENSION IF NOT EXISTS citext;")
                 logger.info("Installed citext extension")
             
-            # Build SQL statements
-            create_table_sql = self._build_create_table_sql(
-                schema, api_name, object_prefix, fields, datatype_mappings
-            )
+            if is_update_mode:
+                # UPDATE MODE: Add new columns to existing table
+                
+                # Ensure is_deleted column exists
+                self._ensure_is_deleted_column(schema, api_name, cur)
+                
+                # Get existing columns
+                existing_columns = self._get_existing_columns(schema, api_name, cur)
+                
+                # Find new fields to add
+                new_fields = []
+                for field in fields:
+                    column_name = f"{object_prefix}_{field['api_name']}"
+                    if column_name not in existing_columns:
+                        new_fields.append(field)
+                
+                if new_fields:
+                    logger.info(f"Adding {len(new_fields)} new fields to {api_name}")
+                    
+                    # Build ALTER TABLE statements for new columns
+                    alter_stmts = self._build_alter_table_add_columns(
+                        schema, api_name, object_prefix, new_fields, datatype_mappings
+                    )
+                    
+                    # Build comments for new fields
+                    comment_stmts = self._build_comment_statements(
+                        schema, api_name, object_prefix, description, new_fields
+                    )
+                    
+                    # Build constraints for new fields
+                    constraint_stmts = self._build_constraint_statements(
+                        schema, api_name, object_prefix, new_fields
+                    )
+                    
+                    # Build foreign keys for new reference fields
+                    fk_stmts = self._build_foreign_key_statements(
+                        schema, api_name, object_prefix, new_fields
+                    )
+                    
+                    # Build indexes for new fields
+                    index_stmts = self._build_index_statements(
+                        schema, api_name, object_prefix, new_fields
+                    )
+                    
+                    # Execute ALTER TABLE statements
+                    for stmt in alter_stmts:
+                        logger.debug(f"ALTER TABLE SQL:\n{stmt}")
+                        cur.execute(stmt)
+                    
+                    for stmt in comment_stmts:
+                        cur.execute(stmt)
+                    
+                    for stmt in constraint_stmts:
+                        cur.execute(stmt)
+                    
+                    for stmt in fk_stmts:
+                        cur.execute(stmt)
+                    
+                    for stmt in index_stmts:
+                        cur.execute(stmt)
+                    
+                    logger.info(f"Successfully added {len(new_fields)} fields to {api_name}")
+                else:
+                    logger.info(f"No new fields to add to {api_name}")
+                
+            else:
+                # CREATE MODE: Create new table
+                
+                # Build SQL statements
+                create_table_sql = self._build_create_table_sql(
+                    schema, api_name, object_prefix, fields, datatype_mappings
+                )
+                
+                comment_stmts = self._build_comment_statements(
+                    schema, api_name, object_prefix, description, fields
+                )
+                
+                constraint_stmts = self._build_constraint_statements(
+                    schema, api_name, object_prefix, fields
+                )
+                
+                fk_stmts = self._build_foreign_key_statements(
+                    schema, api_name, object_prefix, fields
+                )
+                
+                index_stmts = self._build_index_statements(
+                    schema, api_name, object_prefix, fields
+                )
+                
+                # Execute deployment
+                logger.debug(f"CREATE TABLE SQL:\n{create_table_sql}")
+                cur.execute(create_table_sql)
+                
+                for stmt in comment_stmts:
+                    cur.execute(stmt)
+                
+                for stmt in constraint_stmts:
+                    cur.execute(stmt)
+                
+                for stmt in fk_stmts:
+                    cur.execute(stmt)
+                
+                for stmt in index_stmts:
+                    cur.execute(stmt)
+                
+                logger.info(f"Successfully created table {api_name} with {len(fields)} fields")
             
-            comment_stmts = self._build_comment_statements(
-                schema, api_name, object_prefix, description, fields
-            )
-            
-            constraint_stmts = self._build_constraint_statements(
-                schema, api_name, object_prefix, fields
-            )
-            
-            fk_stmts = self._build_foreign_key_statements(
-                schema, api_name, object_prefix, fields
-            )
-            
-            index_stmts = self._build_index_statements(
-                schema, api_name, object_prefix, fields
-            )
-            
-            # Execute deployment
-            logger.debug(f"CREATE TABLE SQL:\n{create_table_sql}")
-            cur.execute(create_table_sql)
-            
-            for stmt in comment_stmts:
-                cur.execute(stmt)
-            
-            for stmt in constraint_stmts:
-                cur.execute(stmt)
-            
-            for stmt in fk_stmts:
-                cur.execute(stmt)
-            
-            for stmt in index_stmts:
-                cur.execute(stmt)
-            
-            # Verify table was actually created
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                ) as exists
-            """, (schema, api_name))
-            
-            if not cur.fetchone()['exists']:
+            # Verify table exists
+            if not self._table_exists(schema, api_name, cur):
                 raise ValueError(
-                    f"Table {schema}.{api_name} was not created successfully"
+                    f"Table {schema}.{api_name} does not exist after deployment"
                 )
             
             logger.info(f"Verified table {schema}.{api_name} exists in database")
             
+            # Generate S3 folder path for file storage
+            # Format: s3://unshackle-appify/<tenant_uuid>/<object_id>/
+            # For appify-admin (public schema), use 'core' as tenant identifier
+            if schema == 'public':
+                tenant_identifier = 'core'
+            else:
+                # Extract tenant UUID from customer_id or use schema name
+                tenant_identifier = customer_id if customer_id else schema.replace('tenant_', '')
+            
+            s3_folder_path = f"s3://unshackle-appify/{tenant_identifier}/{str(object_id)}/"
+            logger.info(f"Generated S3 folder path: {s3_folder_path}")
+            
             # Update status to 'created'
-            cur.execute(f"""
-                UPDATE {schema}.sys_object_metadata
-                SET status = 'created',
-                    table_created_date = now(),
-                    table_name = %s,
-                    deployment_error = NULL,
-                    modified_date = now()
-                WHERE id = %s
-                RETURNING deployment_started_date, table_created_date
-            """, (api_name, str(object_id)))
+            if is_update_mode:
+                # UPDATE mode: Don't overwrite table_created_date or s3_folder_path
+                cur.execute(f"""
+                    UPDATE {schema}.sys_object_metadata
+                    SET status = 'created',
+                        table_name = %s,
+                        s3_folder_path = COALESCE(s3_folder_path, %s),
+                        deployment_error = NULL,
+                        modified_date = now()
+                    WHERE id = %s
+                    RETURNING deployment_started_date, table_created_date, s3_folder_path
+                """, (api_name, s3_folder_path, str(object_id)))
+            else:
+                # CREATE mode: Set table_created_date and s3_folder_path
+                cur.execute(f"""
+                    UPDATE {schema}.sys_object_metadata
+                    SET status = 'created',
+                        table_created_date = now(),
+                        table_name = %s,
+                        s3_folder_path = %s,
+                        deployment_error = NULL,
+                        modified_date = now()
+                    WHERE id = %s
+                    RETURNING deployment_started_date, table_created_date, s3_folder_path
+                """, (api_name, s3_folder_path, str(object_id)))
             
             result = cur.fetchone()
             
@@ -589,8 +749,9 @@ class ObjectDeploymentService:
             conn.commit()
             cur.close()
             
+            mode_msg = "updated" if is_update_mode else "created"
             logger.info(
-                f"Successfully deployed {api_name} with {len(fields)} fields"
+                f"Successfully {mode_msg} {api_name} with {len(fields)} fields"
             )
             
             return {
@@ -599,10 +760,12 @@ class ObjectDeploymentService:
                 "table_name": api_name,
                 "schema": schema,
                 "status": "created",
+                "deployment_mode": "update" if is_update_mode else "create",
                 "deployment_started_date": result['deployment_started_date'],
                 "table_created_date": result['table_created_date'],
+                "s3_folder_path": result['s3_folder_path'],
                 "fields_deployed": len(fields),
-                "message": "Table created successfully"
+                "message": f"Table {mode_msg} successfully"
             }
             
         except Exception as e:

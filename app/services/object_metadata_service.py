@@ -319,7 +319,7 @@ class ObjectMetadataService:
             Updated object metadata or None if not found
             
         Raises:
-            ValueError: If new api_name conflicts with existing
+            ValueError: If new api_name conflicts with existing or if trying to change api_name
         """
         conn, schema, db_type = self._get_connection_and_schema(
             user_role, customer_id
@@ -329,77 +329,136 @@ class ObjectMetadataService:
             conn.set_isolation_level(ISOLATION_LEVEL_READ_COMMITTED)
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             
+            # Fetch existing object to compare for changes and enforce immutability
+            cur.execute(
+                f"""SELECT label, api_name, description, used_in_global_search, 
+                           enable_audit, is_remote_object, fields, dependencies, 
+                           uniqueness, reference_controls, advanced_search, 
+                           validation_rules, status
+                    FROM {schema}.sys_object_metadata
+                    WHERE id = %s""",
+                (str(object_id),)
+            )
+            existing = cur.fetchone()
+            
+            if not existing:
+                cur.close()
+                logger.warning(f"Object {object_id} not found in {schema}")
+                return None
+            
             # Build update fields
             updates = []
             params = []
+            has_changes = False
             
-            # If label changed, regenerate api_name
+            # If label changed, regenerate api_name but enforce immutability
             new_api_name = None
-            if data.label is not None:
+            if data.label is not None and data.label != existing['label']:
                 new_api_name = self._sanitize_label_to_api_name(
                     data.label, customer_prefix
                 )
                 
-                # Check uniqueness (exclude current record)
-                cur.execute(
-                    f"SELECT COUNT(*) as count FROM {schema}.sys_object_metadata "
-                    f"WHERE api_name = %s AND id != %s",
-                    (new_api_name, str(object_id))
-                )
-                if cur.fetchone()['count'] > 0:
+                # IMMUTABILITY CHECK: api_name cannot change once created
+                if new_api_name != existing['api_name']:
                     raise ValueError(
-                        f"Object with api_name '{new_api_name}' already exists"
+                        f"Cannot change api_name. The new label '{data.label}' would generate "
+                        f"api_name '{new_api_name}', but the existing api_name is '{existing['api_name']}'. "
+                        f"API names are immutable once created."
                     )
                 
+                # Label changed but api_name remains the same
                 updates.append("label = %s")
                 params.append(data.label)
-                updates.append("api_name = %s")
-                params.append(new_api_name)
+                has_changes = True
             
-            if data.description is not None:
+            # Change detection for other fields
+            if data.description is not None and data.description != existing['description']:
                 updates.append("description = %s")
                 params.append(data.description)
+                has_changes = True
             
-            if data.used_in_global_search is not None:
+            if data.used_in_global_search is not None and data.used_in_global_search != existing['used_in_global_search']:
                 updates.append("used_in_global_search = %s")
                 params.append(data.used_in_global_search)
+                has_changes = True
             
-            if data.enable_audit is not None:
+            if data.enable_audit is not None and data.enable_audit != existing['enable_audit']:
                 updates.append("enable_audit = %s")
                 params.append(data.enable_audit)
+                has_changes = True
             
-            if data.is_remote_object is not None:
+            if data.is_remote_object is not None and data.is_remote_object != existing['is_remote_object']:
                 updates.append("is_remote_object = %s")
                 params.append(data.is_remote_object)
+                has_changes = True
             
+            # For JSON fields, compare as strings to detect changes
             if data.fields is not None:
-                updates.append("fields = %s")
-                params.append(psycopg2.extras.Json(data.fields))
+                import json
+                new_fields_str = json.dumps(data.fields, sort_keys=True)
+                old_fields_str = json.dumps(existing['fields'], sort_keys=True) if existing['fields'] else None
+                if new_fields_str != old_fields_str:
+                    updates.append("fields = %s")
+                    params.append(psycopg2.extras.Json(data.fields))
+                    has_changes = True
             
             if data.dependencies is not None:
-                updates.append("dependencies = %s")
-                params.append(psycopg2.extras.Json(data.dependencies) if data.dependencies else None)
+                import json
+                new_deps_str = json.dumps(data.dependencies, sort_keys=True) if data.dependencies else None
+                old_deps_str = json.dumps(existing['dependencies'], sort_keys=True) if existing['dependencies'] else None
+                if new_deps_str != old_deps_str:
+                    updates.append("dependencies = %s")
+                    params.append(psycopg2.extras.Json(data.dependencies) if data.dependencies else None)
+                    has_changes = True
             
             if data.uniqueness is not None:
-                updates.append("uniqueness = %s")
-                params.append(psycopg2.extras.Json(data.uniqueness) if data.uniqueness else None)
+                import json
+                new_uniq_str = json.dumps(data.uniqueness, sort_keys=True) if data.uniqueness else None
+                old_uniq_str = json.dumps(existing['uniqueness'], sort_keys=True) if existing['uniqueness'] else None
+                if new_uniq_str != old_uniq_str:
+                    updates.append("uniqueness = %s")
+                    params.append(psycopg2.extras.Json(data.uniqueness) if data.uniqueness else None)
+                    has_changes = True
             
             if data.reference_controls is not None:
-                updates.append("reference_controls = %s")
-                params.append(psycopg2.extras.Json(data.reference_controls) if data.reference_controls else None)
+                import json
+                new_rc_str = json.dumps(data.reference_controls, sort_keys=True) if data.reference_controls else None
+                old_rc_str = json.dumps(existing['reference_controls'], sort_keys=True) if existing['reference_controls'] else None
+                if new_rc_str != old_rc_str:
+                    updates.append("reference_controls = %s")
+                    params.append(psycopg2.extras.Json(data.reference_controls) if data.reference_controls else None)
+                    has_changes = True
             
             if data.advanced_search is not None:
-                updates.append("advanced_search = %s")
-                params.append(psycopg2.extras.Json(data.advanced_search) if data.advanced_search else None)
+                import json
+                new_as_str = json.dumps(data.advanced_search, sort_keys=True) if data.advanced_search else None
+                old_as_str = json.dumps(existing['advanced_search'], sort_keys=True) if existing['advanced_search'] else None
+                if new_as_str != old_as_str:
+                    updates.append("advanced_search = %s")
+                    params.append(psycopg2.extras.Json(data.advanced_search) if data.advanced_search else None)
+                    has_changes = True
             
             if data.validation_rules is not None:
-                updates.append("validation_rules = %s")
-                params.append(psycopg2.extras.Json(data.validation_rules) if data.validation_rules else None)
+                import json
+                new_vr_str = json.dumps(data.validation_rules, sort_keys=True) if data.validation_rules else None
+                old_vr_str = json.dumps(existing['validation_rules'], sort_keys=True) if existing['validation_rules'] else None
+                if new_vr_str != old_vr_str:
+                    updates.append("validation_rules = %s")
+                    params.append(psycopg2.extras.Json(data.validation_rules) if data.validation_rules else None)
+                    has_changes = True
             
-            if not updates:
-                # No changes, return current record
+            if not has_changes:
+                # No actual changes detected, return current record without update
                 cur.close()
+                logger.info(f"No changes detected for object {object_id} in {schema}")
                 return self.get_by_id(object_id, user_role, customer_id)
+            
+            # AUTO-DRAFT: If object was previously deployed (status='created'), set status to 'draft'
+            # so user must redeploy to apply changes
+            if existing['status'] == 'created':
+                updates.append("status = %s")
+                params.append('draft')
+                logger.info(f"Object {object_id} status changed to 'draft' due to modifications")
             
             # Add modified_by
             updates.append("modified_by = %s")
