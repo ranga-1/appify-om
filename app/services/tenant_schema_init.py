@@ -81,7 +81,7 @@ class TenantSchemaInitializer:
         self._db_credentials: Optional[Dict[str, str]] = None
     
     def _get_db_credentials(self) -> dict:
-        """Retrieve database credentials from AWS Secrets Manager with caching.
+        """Retrieve database credentials from environment or AWS Secrets Manager with caching.
         
         Returns:
             Dictionary containing database connection parameters
@@ -89,6 +89,17 @@ class TenantSchemaInitializer:
         Raises:
             Exception: If unable to retrieve credentials
         """
+        # Check if using local credentials mode
+        if settings.use_local_credentials:
+            logger.info("Using local tenant database credentials from environment")
+            return {
+                'host': settings.tenants_db_host,
+                'port': str(settings.tenants_db_port),
+                'dbname': settings.tenants_db_name,
+                'username': settings.tenants_db_username,
+                'password': settings.tenants_db_password
+            }
+        
         # Check cache first
         cached_creds = self._credential_cache.get(settings.db_secret_id)
         if cached_creds:

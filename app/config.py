@@ -16,6 +16,23 @@ class Settings(BaseSettings):
     aws_profile: str = "appify-unshackle"
     
     # Database Configuration
+    use_local_credentials: bool = False  # Toggle for local development mode
+    
+    # Local Tenants Database Configuration (used when use_local_credentials=True)
+    tenants_db_host: str = ""
+    tenants_db_port: int = 5432
+    tenants_db_name: str = ""
+    tenants_db_username: str = ""
+    tenants_db_password: str = ""
+    
+    # Local Core Database Configuration (used when use_local_credentials=True)
+    core_db_host: str = ""
+    core_db_port: int = 5432
+    core_db_name: str = ""
+    core_db_username: str = ""
+    core_db_password: str = ""
+    
+    # AWS Secrets Manager Configuration (used when use_local_credentials=False)
     db_secret_id: str = "appify/unshackle/tenants/admin"
     db_name: str = "tenants"  # Database containing tenant schemas
     core_db_secret_id: str = "appify/unshackle/core/db"  # unshackle_core database

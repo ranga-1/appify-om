@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS sys_object_metadata
     CONSTRAINT object_metadata_api_name_key UNIQUE (api_name),
     CONSTRAINT object_metadata_label_key UNIQUE (label),
     CONSTRAINT valid_api_name CHECK (api_name ~ '^[a-z][a-z0-9_]*$'::text),
-    CONSTRAINT valid_status CHECK (status IN ('draft', 'deploying', 'created', 'failed')),
+    CONSTRAINT valid_status CHECK (status IN ('draft', 'deploying', 'created', 'modified', 'failed')),
     CONSTRAINT valid_fields CHECK (jsonb_typeof(fields) = 'array'::text),
     CONSTRAINT valid_dependencies CHECK (dependencies IS NULL OR jsonb_typeof(dependencies) = 'array'::text),
     CONSTRAINT valid_uniqueness CHECK (uniqueness IS NULL OR jsonb_typeof(uniqueness) = 'array'::text),
@@ -46,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_object_metadata_table_created_date ON sys_object_
 CREATE INDEX IF NOT EXISTS idx_object_metadata_global_search ON sys_object_metadata USING btree (used_in_global_search) WHERE used_in_global_search = true;
 CREATE INDEX IF NOT EXISTS idx_object_metadata_failed_deployment ON sys_object_metadata USING btree (status) WHERE status = 'failed';
 CREATE INDEX IF NOT EXISTS idx_object_metadata_deploying ON sys_object_metadata USING btree (status) WHERE status = 'deploying';
+CREATE INDEX IF NOT EXISTS idx_object_metadata_modified ON sys_object_metadata USING btree (status) WHERE status = 'modified';
 CREATE INDEX IF NOT EXISTS idx_object_metadata_fields ON sys_object_metadata USING gin (fields);
 CREATE INDEX IF NOT EXISTS idx_object_metadata_dependencies ON sys_object_metadata USING gin (dependencies);
 CREATE INDEX IF NOT EXISTS idx_object_metadata_validation_rules ON sys_object_metadata USING gin (validation_rules);

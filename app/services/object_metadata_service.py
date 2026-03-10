@@ -295,6 +295,60 @@ class ObjectMetadataService:
             else:
                 db_manager.return_tenants_connection(conn)
     
+    def _validate_deployed_object_update(
+        self,
+        existing: Dict,
+        data: ObjectMetadataUpdate
+    ) -> None:
+        """
+        Validate updates to deployed objects (status='created' or 'modified').
+        
+        When an object is deployed, only allow changes that don't affect table structure:
+        - DENY: Changing api_name (table name)
+        - DENY: Changing field api_name (column name)
+        - DENY: Changing field type (column data type)
+        - ALLOW: Everything else (labels, descriptions, adding/removing fields, etc.)
+        
+        Args:
+            existing: Current object metadata from database
+            data: Update request data
+            
+        Raises:
+            ValueError: If attempting restricted changes
+        """
+        import json
+        
+        # Only validate if fields are being updated
+        if data.fields is None:
+            return
+        
+        existing_fields = existing.get('fields', [])
+        new_fields = data.fields
+        
+        # Create maps of existing fields by api_name for quick lookup
+        existing_fields_map = {f['api_name']: f for f in existing_fields if 'api_name' in f}
+        new_fields_map = {f['api_name']: f for f in new_fields if 'api_name' in f}
+        
+        # Check for changes to existing fields
+        for api_name, existing_field in existing_fields_map.items():
+            if api_name in new_fields_map:
+                new_field = new_fields_map[api_name]
+                
+                # Check if type changed
+                existing_type = existing_field.get('type')
+                new_type = new_field.get('type')
+                
+                if existing_type != new_type:
+                    raise ValueError(
+                        f"Cannot change field type for '{api_name}' from '{existing_type}' to '{new_type}' "
+                        f"on deployed object. Field types are immutable after deployment."
+                    )
+        
+        # Note: We DO allow:
+        # - Adding new fields (they will be added via ALTER TABLE on next deploy)
+        # - Removing fields (mark_as_deleted, column persists)
+        # - Changing field labels, descriptions, constraints, etc.
+    
     def update(
         self,
         object_id: UUID,
@@ -319,7 +373,7 @@ class ObjectMetadataService:
             Updated object metadata or None if not found
             
         Raises:
-            ValueError: If new api_name conflicts with existing or if trying to change api_name
+            ValueError: If attempting to change api_name or field types on deployed objects
         """
         conn, schema, db_type = self._get_connection_and_schema(
             user_role, customer_id
@@ -346,18 +400,18 @@ class ObjectMetadataService:
                 logger.warning(f"Object {object_id} not found in {schema}")
                 return None
             
+            # Validate updates if object is deployed (status='created' or 'modified')
+            if existing['status'] in ('created', 'modified'):
+                self._validate_deployed_object_update(existing, data)
+            
             # Build update fields
             updates = []
             params = []
             has_changes = False
             
-            # IMMUTABILITY CHECK: api_name cannot be changed directly
-            # Note: api_name is NOT regenerated when label changes - it stays as originally created
-            if data.api_name is not None and data.api_name != existing['api_name']:
-                raise ValueError(
-                    f"Cannot change api_name from '{existing['api_name']}' to '{data.api_name}'. "
-                    f"API names are immutable once created. You can change the label, but api_name will remain the same."
-                )
+            # Note: api_name is immutable and cannot be changed
+            # It is NOT included in ObjectMetadataUpdate schema
+            # Label can be changed freely - api_name stays the same
             
             # Label can be changed freely - api_name is NOT regenerated
             if data.label is not None and data.label != existing['label']:
@@ -447,12 +501,12 @@ class ObjectMetadataService:
                 logger.info(f"No changes detected for object {object_id} in {schema}")
                 return self.get_by_id(object_id, user_role, customer_id)
             
-            # AUTO-DRAFT: If object was previously deployed (status='created'), set status to 'draft'
-            # so user must redeploy to apply changes
+            # If object was previously deployed (status='created'), set status to 'modified'
+            # to indicate it needs redeployment to sync changes
             if existing['status'] == 'created':
                 updates.append("status = %s")
-                params.append('draft')
-                logger.info(f"Object {object_id} status changed to 'draft' due to modifications")
+                params.append('modified')
+                logger.info(f"Object {object_id} status changed to 'modified' due to modifications")
             
             # Add modified_by
             updates.append("modified_by = %s")

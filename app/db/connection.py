@@ -24,7 +24,7 @@ class DatabaseManager:
     
     def _get_secret(self, secret_id: str) -> Dict:
         """
-        Fetch secret from AWS Secrets Manager.
+        Fetch secret from environment or AWS Secrets Manager.
         
         Args:
             secret_id: Secret ID in Secrets Manager
@@ -32,7 +32,32 @@ class DatabaseManager:
         Returns:
             Dictionary with database credentials
         """
-        logger.info(f"Fetching secret: {secret_id}")
+        # Check if using local credentials mode
+        if settings.use_local_credentials:
+            logger.info(f"Using local database credentials for secret_id: {secret_id}")
+            
+            # Determine which database based on secret_id
+            if secret_id == settings.db_secret_id:
+                # Tenants database
+                return {
+                    'host': settings.tenants_db_host,
+                    'port': settings.tenants_db_port,
+                    'dbname': settings.tenants_db_name,
+                    'username': settings.tenants_db_username,
+                    'password': settings.tenants_db_password
+                }
+            elif secret_id == settings.core_db_secret_id:
+                # Core database
+                return {
+                    'host': settings.core_db_host,
+                    'port': settings.core_db_port,
+                    'dbname': settings.core_db_name,
+                    'username': settings.core_db_username,
+                    'password': settings.core_db_password
+                }
+        
+        # Otherwise, use AWS Secrets Manager
+        logger.info(f"Fetching secret from AWS Secrets Manager: {secret_id}")
         session = boto3.Session(region_name=settings.aws_region)
         client = session.client('secretsmanager')
         response = client.get_secret_value(SecretId=secret_id)
