@@ -14,17 +14,52 @@ router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
 # Request Models
+class AdminUserInfo(BaseModel):
+    """Admin user information for tenant provisioning."""
+    
+    user_id: str = Field(..., description="Keycloak user UUID")
+    email: str = Field(..., description="Admin user email address")
+    username: str = Field(..., description="Admin username")
+    first_name: Optional[str] = Field(None, description="First name")
+    last_name: Optional[str] = Field(None, description="Last name")
+    full_name: Optional[str] = Field(None, description="Full name")
+    role_type: str = Field("customer_admin", description="Role to assign (customer_admin or customer_user)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "email": "admin@acme.com",
+                "username": "admin@acme.com",
+                "first_name": "John",
+                "last_name": "Doe",
+                "full_name": "John Doe",
+                "role_type": "customer_admin"
+            }
+        }
+
+
 class TenantSchemaInitRequest(BaseModel):
     """Request model for tenant schema initialization."""
     
     username: str = Field(..., description="Database username for the tenant")
     password: str = Field(..., description="Database password for the tenant")
+    admin_user: Optional[AdminUserInfo] = Field(None, description="Optional admin user to create during provisioning")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "username": "tenant_acme",
-                "password": "secure_password_123"
+                "password": "secure_password_123",
+                "admin_user": {
+                    "user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "email": "admin@acme.com",
+                    "username": "admin@acme.com",
+                    "first_name": "John",
+                    "last_name": "Doe",
+                    "full_name": "John Doe",
+                    "role_type": "customer_admin"
+                }
             }
         }
 
@@ -122,6 +157,8 @@ def initialize_tenant_schema(
     try:
         logger.info(f"Received schema initialization request for customer: {customer_id}")
         logger.info(f"Username: {request.username}")
+        if request.admin_user:
+            logger.info(f"Admin user to create: {request.admin_user.email} (role: {request.admin_user.role_type})")
         
         # Get the initializer service
         initializer = get_tenant_schema_initializer()
@@ -130,7 +167,8 @@ def initialize_tenant_schema(
         result = initializer.initialize_tenant_schema(
             customer_id, 
             request.username, 
-            request.password
+            request.password,
+            admin_user=request.admin_user.dict() if request.admin_user else None
         )
         
         if not result["success"]:

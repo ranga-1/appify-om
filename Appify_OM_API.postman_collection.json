@@ -1,0 +1,735 @@
+{
+	"info": {
+		"_postman_id": "om-api-collection-2026",
+		"name": "Appify Object Modeler API",
+		"description": "Complete API collection for Generic Data API (Phases 1-4)\n\nFeatures:\n- Permission-based access control\n- CRUD operations\n- Bulk operations\n- Aggregations\n- Export/Import\n- Audit logging\n- Soft deletes\n- Rate limiting",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "API Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 2: Data API - CRUD",
+			"item": [
+				{
+					"name": "Create Record",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"department\": \"Engineering\",\n  \"salary\": 120000,\n  \"hire_date\": \"2024-01-15\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Record by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/{{record_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "{{record_id}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Record",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"department\": \"Senior Engineering\",\n  \"salary\": 135000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/{{record_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "{{record_id}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Record",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/{{record_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "{{record_id}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Records",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"filters\": [\n    {\n      \"field\": \"department\",\n      \"operator\": \"=\",\n      \"value\": \"Engineering\"\n    },\n    {\n      \"field\": \"salary\",\n      \"operator\": \">=\",\n      \"value\": 100000\n    }\n  ],\n  \"order_by\": [\"salary DESC\"],\n  \"limit\": 10,\n  \"offset\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/query",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "query"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 3: Bulk Operations",
+			"item": [
+				{
+					"name": "Bulk Create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"records\": [\n    {\n      \"first_name\": \"Alice\",\n      \"last_name\": \"Smith\",\n      \"email\": \"alice.smith@example.com\",\n      \"department\": \"Engineering\",\n      \"salary\": 125000\n    },\n    {\n      \"first_name\": \"Bob\",\n      \"last_name\": \"Johnson\",\n      \"email\": \"bob.johnson@example.com\",\n      \"department\": \"Sales\",\n      \"salary\": 95000\n    },\n    {\n      \"first_name\": \"Carol\",\n      \"last_name\": \"Williams\",\n      \"email\": \"carol.williams@example.com\",\n      \"department\": \"Marketing\",\n      \"salary\": 105000\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/bulk",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "bulk"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Update",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"filters\": [\n    {\n      \"field\": \"department\",\n      \"operator\": \"=\",\n      \"value\": \"Engineering\"\n    }\n  ],\n  \"updates\": {\n    \"department\": \"Software Engineering\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/bulk",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "bulk"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Delete",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"filters\": [\n    {\n      \"field\": \"status\",\n      \"operator\": \"=\",\n      \"value\": \"inactive\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/bulk",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "bulk"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 3: Aggregations",
+			"item": [
+				{
+					"name": "Count Records",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aggregations\": [\n    {\n      \"function\": \"COUNT\",\n      \"field\": \"*\",\n      \"alias\": \"total_employees\"\n    }\n  ],\n  \"filters\": [\n    {\n      \"field\": \"department\",\n      \"operator\": \"=\",\n      \"value\": \"Engineering\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/aggregate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "aggregate"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Average Salary by Department",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aggregations\": [\n    {\n      \"function\": \"AVG\",\n      \"field\": \"salary\",\n      \"alias\": \"avg_salary\"\n    },\n    {\n      \"function\": \"COUNT\",\n      \"field\": \"*\",\n      \"alias\": \"employee_count\"\n    }\n  ],\n  \"group_by\": [\"department\"],\n  \"order_by\": [\"avg_salary DESC\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/aggregate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "aggregate"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Salary Stats",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"aggregations\": [\n    {\n      \"function\": \"MIN\",\n      \"field\": \"salary\",\n      \"alias\": \"min_salary\"\n    },\n    {\n      \"function\": \"MAX\",\n      \"field\": \"salary\",\n      \"alias\": \"max_salary\"\n    },\n    {\n      \"function\": \"AVG\",\n      \"field\": \"salary\",\n      \"alias\": \"avg_salary\"\n    },\n    {\n      \"function\": \"SUM\",\n      \"field\": \"salary\",\n      \"alias\": \"total_payroll\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/aggregate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "aggregate"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 3: Export/Import",
+			"item": [
+				{
+					"name": "Export to CSV",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"csv\",\n  \"filters\": [\n    {\n      \"field\": \"department\",\n      \"operator\": \"=\",\n      \"value\": \"Engineering\"\n    }\n  ],\n  \"fields\": [\"first_name\", \"last_name\", \"email\", \"department\", \"salary\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/export",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "export"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export to JSON",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"json\",\n  \"filters\": [],\n  \"limit\": 100\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/export",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "export"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export to Excel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"excel\",\n  \"include_headers\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/export",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "export"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Import from CSV",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"csv\",\n  \"data\": \"first_name,last_name,email,department,salary\\nDavid,Brown,david.brown@example.com,Engineering,115000\\nEmily,Davis,emily.davis@example.com,Marketing,98000\",\n  \"mode\": \"insert\",\n  \"validate_only\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/import",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "import"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Import from JSON",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"json\",\n  \"data\": [{\"first_name\": \"Frank\", \"last_name\": \"Miller\", \"email\": \"frank.miller@example.com\", \"department\": \"Sales\", \"salary\": 92000}],\n  \"mode\": \"upsert\",\n  \"validate_only\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/data/{{object_name}}/import",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "data", "{{object_name}}", "import"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 4: Audit Logging",
+			"item": [
+				{
+					"name": "Get Record Audit History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/audit/record/{{record_id}}?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "audit", "record", "{{record_id}}"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Activity Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/audit/user/{{user_id}}/activity?days=30",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "audit", "user", "{{user_id}}", "activity"],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Phase 4: Soft Deletes",
+			"item": [
+				{
+					"name": "Get Deleted Records",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/deleted/{{object_name}}?include_restored=false&limit=100",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "deleted", "{{object_name}}"],
+							"query": [
+								{
+									"key": "include_restored",
+									"value": "false"
+								},
+								{
+									"key": "limit",
+									"value": "100"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Undelete Record",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-User-ID",
+								"value": "{{user_id}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Tenant-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"object_name\": \"{{object_name}}\",\n  \"record_id\": \"{{record_id}}\",\n  \"reason\": \"Accidental deletion - restoring at user request\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/undelete",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "undelete"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "550e8400-e29b-41d4-a716-446655440000",
+			"type": "string"
+		},
+		{
+			"key": "tenant_id",
+			"value": "acme",
+			"type": "string"
+		},
+		{
+			"key": "object_name",
+			"value": "employee",
+			"type": "string"
+		},
+		{
+			"key": "record_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

@@ -151,3 +151,134 @@ CREATE TRIGGER trg_sys_users_modified_date
     BEFORE UPDATE ON sys_users
     FOR EACH ROW
     EXECUTE FUNCTION update_modified_date();
+
+
+-- ============================================================================
+-- PHASE 0: Permission Infrastructure Tables
+-- ============================================================================
+
+-- Roles table - Maps Keycloak roles to database context
+CREATE TABLE IF NOT EXISTS sys_roles
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    keycloak_role_id uuid,
+    role_name text NOT NULL,
+    description text,
+    is_system_role boolean NOT NULL DEFAULT false,
+    is_active boolean NOT NULL DEFAULT true,
+    created_by uuid NOT NULL,
+    created_date timestamp with time zone NOT NULL DEFAULT now(),
+    modified_by uuid NOT NULL,
+    modified_date timestamp with time zone NOT NULL DEFAULT now(),
+    audit_info jsonb,
+    CONSTRAINT sys_roles_pkey PRIMARY KEY (id),
+    CONSTRAINT sys_roles_role_name_key UNIQUE (role_name),
+    CONSTRAINT valid_role_name CHECK (role_name ~ '^[a-z][a-z0-9_]*$'::text),
+    CONSTRAINT valid_audit_info CHECK (audit_info IS NULL OR jsonb_typeof(audit_info) = 'object'::text)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sys_roles_role_name ON sys_roles USING btree (role_name);
+CREATE INDEX IF NOT EXISTS idx_sys_roles_keycloak_role_id ON sys_roles USING btree (keycloak_role_id);
+CREATE INDEX IF NOT EXISTS idx_sys_roles_is_active ON sys_roles USING btree (is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sys_roles_is_system_role ON sys_roles USING btree (is_system_role) WHERE is_system_role = true;
+CREATE INDEX IF NOT EXISTS idx_sys_roles_created_date ON sys_roles USING btree (created_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_roles_modified_date ON sys_roles USING btree (modified_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_roles_audit_info ON sys_roles USING gin (audit_info);
+CREATE TRIGGER trg_sys_roles_modified_date
+    BEFORE UPDATE ON sys_roles
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_date();
+COMMENT ON TABLE sys_roles IS 'Defines roles available in this schema/database for permission assignment';
+COMMENT ON COLUMN sys_roles.keycloak_role_id IS 'Optional UUID linking to Keycloak role for synchronization';
+COMMENT ON COLUMN sys_roles.is_system_role IS 'True for built-in roles (admin, viewer), false for custom roles';
+
+
+-- User-Role mapping table - Many-to-many relationship
+CREATE TABLE IF NOT EXISTS sys_user_roles
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    role_id uuid NOT NULL,
+    assigned_by uuid NOT NULL,
+    assigned_date timestamp with time zone NOT NULL DEFAULT now(),
+    expires_date timestamp with time zone,
+    is_active boolean NOT NULL DEFAULT true,
+    metadata jsonb,
+    CONSTRAINT sys_user_roles_pkey PRIMARY KEY (id),
+    CONSTRAINT sys_user_roles_user_role_key UNIQUE (user_id, role_id),
+    CONSTRAINT sys_user_roles_user_fkey FOREIGN KEY (user_id) REFERENCES sys_users(id) ON DELETE CASCADE,
+    CONSTRAINT sys_user_roles_role_fkey FOREIGN KEY (role_id) REFERENCES sys_roles(id) ON DELETE CASCADE,
+    CONSTRAINT valid_metadata CHECK (metadata IS NULL OR jsonb_typeof(metadata) = 'object'::text)
+);
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_user_id ON sys_user_roles USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_role_id ON sys_user_roles USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_assigned_by ON sys_user_roles USING btree (assigned_by);
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_assigned_date ON sys_user_roles USING btree (assigned_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_is_active ON sys_user_roles USING btree (is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_expires_date ON sys_user_roles USING btree (expires_date) WHERE expires_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sys_user_roles_metadata ON sys_user_roles USING gin (metadata);
+COMMENT ON TABLE sys_user_roles IS 'Many-to-many mapping between users and roles for permission assignment';
+COMMENT ON COLUMN sys_user_roles.expires_date IS 'Optional expiration date for temporary role assignments';
+
+
+-- Object permissions table - IAM-style permissions for each role on each object
+CREATE TABLE IF NOT EXISTS sys_object_permissions
+(
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    role_id uuid NOT NULL,
+    object_id uuid NOT NULL,
+    permissions jsonb NOT NULL DEFAULT '[]'::jsonb,
+    row_filter text,
+    field_permissions jsonb,
+    is_active boolean NOT NULL DEFAULT true,
+    created_by uuid NOT NULL,
+    created_date timestamp with time zone NOT NULL DEFAULT now(),
+    modified_by uuid NOT NULL,
+    modified_date timestamp with time zone NOT NULL DEFAULT now(),
+    audit_info jsonb,
+    CONSTRAINT sys_object_permissions_pkey PRIMARY KEY (id),
+    CONSTRAINT sys_object_permissions_role_object_key UNIQUE (role_id, object_id),
+    CONSTRAINT sys_object_permissions_role_fkey FOREIGN KEY (role_id) REFERENCES sys_roles(id) ON DELETE CASCADE,
+    CONSTRAINT sys_object_permissions_object_fkey FOREIGN KEY (object_id) REFERENCES sys_object_metadata(id) ON DELETE CASCADE,
+    CONSTRAINT valid_permissions CHECK (jsonb_typeof(permissions) = 'array'::text),
+    CONSTRAINT valid_field_permissions CHECK (field_permissions IS NULL OR jsonb_typeof(field_permissions) = 'object'::text),
+    CONSTRAINT valid_audit_info CHECK (audit_info IS NULL OR jsonb_typeof(audit_info) = 'object'::text)
+);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_role_id ON sys_object_permissions USING btree (role_id);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_object_id ON sys_object_permissions USING btree (object_id);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_is_active ON sys_object_permissions USING btree (is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_permissions ON sys_object_permissions USING gin (permissions);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_field_permissions ON sys_object_permissions USING gin (field_permissions);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_created_date ON sys_object_permissions USING btree (created_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_modified_date ON sys_object_permissions USING btree (modified_date DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_object_permissions_audit_info ON sys_object_permissions USING gin (audit_info);
+CREATE TRIGGER trg_sys_object_permissions_modified_date
+    BEFORE UPDATE ON sys_object_permissions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_date();
+COMMENT ON TABLE sys_object_permissions IS 'Stores IAM-style permissions for each role on each object (data API access control)';
+COMMENT ON COLUMN sys_object_permissions.permissions IS 'Array of permission strings like ["data:read:scope:all", "query:advanced", "bulk:export:format:csv"]';
+COMMENT ON COLUMN sys_object_permissions.row_filter IS 'Optional SQL WHERE clause template for row-level security (e.g., "created_by = $user_id")';
+COMMENT ON COLUMN sys_object_permissions.field_permissions IS 'Optional field-level overrides: {"field_name": {"access": "read|write|mask|hide"}}';
+
+
+-- ============================================================================
+-- BOOTSTRAP: System Roles for Tenant
+-- ============================================================================
+-- These roles are automatically created for every tenant during provisioning
+
+INSERT INTO sys_roles (role_name, description, is_system_role, is_active, created_by, modified_by)
+VALUES 
+    ('customer_admin', 
+     'Customer administrator - full access to all tenant database operations including system configuration, and instance monitoring', 
+     true, 
+     true, 
+     '00000000-0000-0000-0000-000000000000', 
+     '00000000-0000-0000-0000-000000000000'),
+    
+    ('customer_user', 
+     'Customer user - read-only access to tenant database for monitoring and basic operations', 
+     true, 
+     true,
+     '00000000-0000-0000-0000-000000000000', 
+     '00000000-0000-0000-0000-000000000000')
+ON CONFLICT (role_name) DO NOTHING;

@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     # Credential Cache Configuration (in seconds)
     credential_cache_ttl: int = 3600  # 1 hour
     
+    # Redis Configuration
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+    redis_ssl: bool = False
+    permission_cache_ttl: int = 300  # 5 minutes for permissions
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

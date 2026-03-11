@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from app.config import settings
-from app.api.v1 import tenants, object_metadata, datatype_mappings
+from app.api.v1 import tenants, object_metadata, datatype_mappings, data, admin
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +36,8 @@ app.add_middleware(
 app.include_router(tenants.router, prefix=f"/api/{settings.api_version}")
 app.include_router(object_metadata.router, prefix=f"/api/{settings.api_version}")
 app.include_router(datatype_mappings.router, prefix=f"/api/{settings.api_version}")
+app.include_router(data.router, prefix=f"/api/{settings.api_version}")  # Generic Data API
+app.include_router(admin.router, prefix=f"/api/{settings.api_version}")  # Phase 4: Audit & Soft Delete
 
 
 @app.on_event("startup")

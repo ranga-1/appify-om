@@ -2,10 +2,13 @@
 
 import json
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Generator
 
 import boto3
 from psycopg2 import pool
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -141,3 +144,45 @@ class DatabaseManager:
 
 # Global instance
 db_manager = DatabaseManager()
+
+
+# ============================================================================
+# SQLAlchemy Session Management (for Data API)
+# ============================================================================
+
+def get_tenant_db() -> Generator[Session, None, None]:
+    """
+    FastAPI dependency that provides a SQLAlchemy session for tenant database.
+    
+    This creates a new SQLAlchemy session using the tenant database credentials.
+    The session is automatically closed after the request completes.
+    
+    Yields:
+        SQLAlchemy Session object
+    """
+    # Get credentials
+    if not db_manager._tenants_creds:
+        db_manager._tenants_creds = db_manager._get_secret(settings.db_secret_id)
+    
+    creds = db_manager._tenants_creds
+    
+    # Create connection URL
+    connection_url = (
+        f"postgresql://{creds['username']}:{creds['password']}@"
+        f"{creds['host']}:{creds['port']}/{creds['dbname']}"
+    )
+    
+    # Create engine (NullPool = no connection pooling, create new connection per request)
+    engine = create_engine(connection_url, poolclass=NullPool)
+    
+    # Create session factory
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    # Create session
+    db = SessionLocal()
+    
+    try:
+        yield db
+    finally:
+        db.close()
+        engine.dispose()

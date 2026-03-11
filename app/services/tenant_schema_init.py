@@ -190,7 +190,8 @@ class TenantSchemaInitializer:
         self, 
         customer_id: str, 
         username: str, 
-        password: str
+        password: str,
+        admin_user: Optional[Dict[str, str]] = None
     ) -> dict:
         """Initialize Object Modeler schema for a tenant.
         
@@ -199,6 +200,8 @@ class TenantSchemaInitializer:
         2. Database user
         3. User permissions
         4. OM metadata tables and utility functions
+        5. System roles (customer_admin, customer_user)
+        6. Optional admin user and role assignment
         
         This operation is idempotent where possible.
         
@@ -206,6 +209,14 @@ class TenantSchemaInitializer:
             customer_id: Customer identifier (e.g., 'acme', 'xyz')
             username: Database username for the tenant
             password: Database password for the tenant
+            admin_user: Optional dict with admin user details:
+                - user_id: Keycloak user UUID
+                - email: Email address
+                - username: Username
+                - first_name: First name (optional)
+                - last_name: Last name (optional)
+                - full_name: Full name (optional)
+                - role_type: Role to assign (customer_admin or customer_user)
             
         Returns:
             Dictionary with:
@@ -242,11 +253,14 @@ class TenantSchemaInitializer:
                 username=username,
                 password=password,
                 utility_functions_sql=utility_functions_sql,
-                schema_sql=schema_sql
+                schema_sql=schema_sql,
+                admin_user=admin_user
             )
             
             functions_created = ['update_modified_date', 'update_object_metadata_modified_date']
-            tables_created = ['sys_object_metadata', 'sys_om_datatype_mappings', 'sys_users']
+            tables_created = ['sys_object_metadata', 'sys_om_datatype_mappings', 'sys_users', 'sys_roles', 'sys_user_roles', 'sys_object_permissions']
+            if admin_user:
+                logger.info(f"✅ Admin user created: {admin_user.get('email')} with role: {admin_user.get('role_type', 'customer_admin')}")
             logger.info(f"✅ Successfully initialized schema: {schema_name}")
             
             return {
@@ -286,7 +300,8 @@ class TenantSchemaInitializer:
         username: str,
         password: str,
         utility_functions_sql: str,
-        schema_sql: str
+        schema_sql: str,
+        admin_user: Optional[Dict[str, str]] = None
     ) -> None:
         """Execute complete tenant setup in single psql transaction.
         
@@ -296,6 +311,7 @@ class TenantSchemaInitializer:
             password: User password
             utility_functions_sql: SQL for utility functions
             schema_sql: SQL for base schema
+            admin_user: Optional admin user details dict
             
         Raises:
             Exception: On SQL execution errors
@@ -305,6 +321,51 @@ class TenantSchemaInitializer:
         
         # Escape single quotes in password for SQL
         escaped_password = password.replace("'", "''")
+        
+        # Generate admin user SQL if provided
+        admin_user_sql = ""
+        if admin_user:
+            # Escape string values for SQL
+            user_id = admin_user.get("user_id", "")
+            email = admin_user.get("email", "").replace("'", "''")
+            username_val = admin_user.get("username", "").replace("'", "''")
+            first_name = admin_user.get("first_name", "").replace("'", "''") if admin_user.get("first_name") else ""
+            last_name = admin_user.get("last_name", "").replace("'", "''") if admin_user.get("last_name") else ""
+            full_name = admin_user.get("full_name", "").replace("'", "''") if admin_user.get("full_name") else ""
+            role_type = admin_user.get("role_type", "customer_admin")
+            
+            # Validate role_type
+            if role_type not in ["customer_admin", "customer_user"]:
+                role_type = "customer_admin"
+            
+            admin_user_sql = f"""
+
+-- Step 7: Create admin user and assign role
+INSERT INTO sys_users (user_id, email, username, first_name, last_name, full_name, is_active, created_by, modified_by)
+VALUES 
+    ('{user_id}', 
+     '{email}', 
+     '{username_val}', 
+     '{first_name}', 
+     '{last_name}', 
+     '{full_name}', 
+     true,
+     '00000000-0000-0000-0000-000000000000', 
+     '00000000-0000-0000-0000-000000000000')
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Assign role to admin user
+INSERT INTO sys_user_roles (user_id, role_id, assigned_by)
+SELECT 
+    u.id as user_id,
+    r.id as role_id,
+    '00000000-0000-0000-0000-000000000000' as assigned_by
+FROM sys_users u
+CROSS JOIN sys_roles r
+WHERE u.user_id = '{user_id}' 
+  AND r.role_name = '{role_type}'
+ON CONFLICT (user_id, role_id) DO NOTHING;
+"""
         
         # Build complete SQL script
         complete_sql = f"""-- Complete tenant setup
@@ -332,7 +393,7 @@ SET search_path TO {schema_name};
 
 -- Step 6: Create tables, indexes, triggers
 {schema_sql}
-
+{admin_user_sql}
 COMMIT;
 """
         
